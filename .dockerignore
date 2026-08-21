@@ -1,0 +1,14 @@
+*_test.go
+coverage.out
+coverage.html
+coverage-func.txt
+test-output.txt
+test-results.xml
+cyclo-output.txt
+golangci-output.json
+TESTING.md
+README.md
+.github/
+.env
+*.exe
+db/

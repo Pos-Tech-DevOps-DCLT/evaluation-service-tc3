@@ -1,0 +1,13 @@
+evaluation-service/evaluator.go:22:	getDecision		100.0%
+evaluation-service/evaluator.go:34:	getCombinedFlagInfo	68.8%
+evaluation-service/evaluator.go:67:	fetchFromServices	100.0%
+evaluation-service/evaluator.go:103:	fetchFlag		88.2%
+evaluation-service/evaluator.go:131:	fetchRule		52.9%
+evaluation-service/evaluator.go:159:	runEvaluationLogic	100.0%
+evaluation-service/evaluator.go:189:	getDeterministicBucket	100.0%
+evaluation-service/handlers.go:15:	healthHandler		100.0%
+evaluation-service/handlers.go:21:	evaluationHandler	100.0%
+evaluation-service/main.go:30:		main			0.0%
+evaluation-service/sqs.go:21:		sendEvaluationEvent	25.0%
+evaluation-service/types.go:39:		Error			100.0%
+total:					(statements)		60.1%
