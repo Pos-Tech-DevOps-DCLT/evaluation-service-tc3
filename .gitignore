@@ -1,0 +1,16 @@
+# Binários compilados
+*.exe
+evaluation-service
+
+# Artefatos de testes e relatórios (gerados pela pipeline CI)
+coverage
+coverage.out
+coverage.html
+coverage-func.txt
+test-output.txt
+test-results.xml
+cyclo-output.txt
+golangci-output.json
+
+# Variáveis de ambiente locais
+.env
