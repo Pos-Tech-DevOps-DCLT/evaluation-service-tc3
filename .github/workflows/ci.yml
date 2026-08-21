@@ -17,78 +17,23 @@ jobs:
         with:
           go-version: "1.21"
       - run: go mod download
-      - name: Executar testes com cobertura
-        run: |
-          go test ./... -v -coverprofile=coverage.out -covermode=atomic 2>&1 | tee test-output.txt
-          go tool cover -func=coverage.out | tee coverage-func.txt
       - name: Instalar go-junit-report e gocyclo
         run: |
           go install github.com/jstemmer/go-junit-report/v2@latest
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-      - name: Gerar JUnit XML e calcular complexidade
-        if: always()
+      - name: Executar testes com cobertura
         run: |
+          go test ./... -v -coverprofile=coverage.out -covermode=atomic 2>&1 | tee test-output.txt
+          go tool cover -func=coverage.out
           cat test-output.txt | go-junit-report -set-exit-code > test-results.xml || true
-          gocyclo -over 1 . | sort -rn > cyclo-output.txt || true
-      - name: Publicar relatório no Job Summary
+      - name: Publicar resultados dos testes
+        uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
-        run: |
-          python3 - <<'PYEOF'
-          import os
-          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
-          lines = ["# 📊 Relatório de Qualidade — evaluation-service\n", "## 1 · Testes Unitários\n"]
-          try:
-              import xml.etree.ElementTree as ET
-              root = ET.parse("test-results.xml").getroot()
-              total = int(root.attrib.get("tests", 0))
-              failures = int(root.attrib.get("failures", 0))
-              errors = int(root.attrib.get("errors", 0))
-              passed = total - failures - errors
-              icon = "✅" if failures == 0 and errors == 0 else "❌"
-              lines.append(f"{icon} **{passed} passaram** | ❌ **{failures + errors} falharam** | Total: {total}\n")
-          except Exception as e:
-              lines.append(f"> ⚠️ {e}\n")
-          try:
-              cov_lines = open("coverage-func.txt").readlines()
-              lines.append("\n## 📈 Cobertura de Código\n| Função | Cobertura |\n|--------|----------|\n")
-              total_pct = None
-              for line in cov_lines:
-                  line = line.strip()
-                  if not line: continue
-                  parts = line.split()
-                  if "total:" in line:
-                      total_pct = parts[-1]; continue
-                  if len(parts) >= 3:
-                      try:
-                          pct = float(parts[-1].replace("%",""))
-                          bar = "🟢" if pct >= 80 else ("🟡" if pct >= 50 else "🔴")
-                          lines.append(f"| `{parts[1]}` | {bar} {pct:.1f}% |\n")
-                      except: pass
-              if total_pct:
-                  pct_val = float(total_pct.replace("%",""))
-                  cov_icon = "🟢" if pct_val >= 80 else ("🟡" if pct_val >= 50 else "🔴")
-                  lines.append(f"| **Total** | {cov_icon} **{total_pct}** |\n")
-          except Exception as e:
-              lines.append(f"> ⚠️ {e}\n")
-          try:
-              cyclo_lines = [l.strip() for l in open("cyclo-output.txt") if l.strip()]
-              functions = []
-              for line in cyclo_lines:
-                  parts = line.split()
-                  if len(parts) >= 4:
-                      try: functions.append({"score": int(parts[0]), "name": parts[2], "loc": parts[3]})
-                      except: pass
-              functions.sort(key=lambda x: x["score"], reverse=True)
-              lines.append("\n## 🔬 Complexidade Ciclomática (Top 10)\n| Função | Score | Localização |\n|--------|-------|-------------|\n")
-              for fn in functions[:10]:
-                  risk = "🔴" if fn["score"] >= 10 else ("🟡" if fn["score"] >= 5 else "🟢")
-                  lines.append(f"| `{fn['name']}` | {risk} {fn['score']} | `{fn['loc']}` |\n")
-          except Exception as e:
-              lines.append(f"> ⚠️ {e}\n")
-          open(summary, "a").writelines(lines)
-          PYEOF
-        env:
-          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+        with:
+          files: test-results.xml
+      - name: Complexidade ciclomática (gocyclo)
+        if: always()
+        run: gocyclo -over 5 . || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,8 +41,6 @@ jobs:
           path: |
             test-results.xml
             coverage.out
-            coverage-func.txt
-            cyclo-output.txt
           retention-days: 30
 
   lint:
@@ -110,40 +53,8 @@ jobs:
           go-version: "1.21"
       - name: Instalar golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
-      - name: Executar lint
-        run: |
-          golangci-lint run ./... --out-format json > golangci-output.json 2>&1 || true
-          golangci-lint run ./... --out-format line-number 2>&1 || true
-      - name: Publicar lint no Job Summary
-        if: always()
-        run: |
-          python3 - <<'PYEOF'
-          import json, os
-          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
-          lines = ["# 🔍 Lint — evaluation-service\n"]
-          try:
-              raw = open("golangci-output.json").read().strip()
-              data = json.loads(raw) if raw else {}
-              issues = data.get("Issues") or []
-              if not issues:
-                  lines.append("✅ Nenhum problema encontrado.\n")
-              else:
-                  lines.append(f"> ⚠️ **{len(issues)} problema(s)** — não bloqueia a pipeline.\n\n| Arquivo | Linha | Linter | Descrição |\n|---------|-------|--------|----------|\n")
-                  for issue in issues[:30]:
-                      pos = issue.get("Pos", {})
-                      lines.append(f"| `{pos.get('Filename','').split('/')[-1]}` | {pos.get('Line','')} | `{issue.get('FromLinter','')}` | {issue.get('Text','')} |\n")
-          except Exception as e:
-              lines.append(f"> ⚠️ {e}\n")
-          open(summary, "a").writelines(lines)
-          PYEOF
-        env:
-          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: eval-lint-report
-          path: golangci-output.json
-          retention-days: 30
+      - name: Executar golangci-lint
+        run: golangci-lint run ./... --out-format line-number || true
 
   docker-build:
     name: "3 · Docker Build"
@@ -159,7 +70,7 @@ jobs:
           tags: evaluation-service:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/evaluation-service.tar
+          outputs: type=docker,dest=/tmp/auth-service.tar
       - uses: actions/upload-artifact@v4
         with:
           name: eval-docker-image
@@ -176,38 +87,21 @@ jobs:
           name: eval-docker-image
           path: /tmp
       - run: docker load --input /tmp/evaluation-service.tar
-      - uses: aquasecurity/trivy-action@master
+      - name: Trivy — scan e publicar no Job Summary
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: evaluation-service:${{ github.sha }}
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH,MEDIUM
+      - name: Trivy — salvar relatório JSON
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: evaluation-service:${{ github.sha }}
           format: json
           output: trivy-report.json
           exit-code: 0
           severity: CRITICAL,HIGH,MEDIUM
-      - name: Publicar Trivy no Job Summary
-        if: always()
-        run: |
-          python3 - <<'PYEOF'
-          import json, os
-          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
-          lines = ["# 🛡️ Scan de Vulnerabilidades — evaluation-service\n"]
-          try:
-              data = json.load(open("trivy-report.json"))
-              all_vulns = [{"id": v.get("VulnerabilityID",""), "pkg": v.get("PkgName",""), "severity": v.get("Severity",""), "installed": v.get("InstalledVersion",""), "fixed": v.get("FixedVersion","—"), "title": v.get("Title","")[:60]} for r in data.get("Results",[]) for v in (r.get("Vulnerabilities") or [])]
-              all_vulns.sort(key=lambda x: {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3}.get(x["severity"],4))
-              counts = {s: sum(1 for v in all_vulns if v["severity"]==s) for s in ["CRITICAL","HIGH","MEDIUM"]}
-              if not all_vulns:
-                  lines.append("✅ Nenhuma vulnerabilidade encontrada.\n")
-              else:
-                  lines.append(f"🔴 **CRITICAL: {counts['CRITICAL']}** | 🟠 **HIGH: {counts['HIGH']}** | 🟡 **MEDIUM: {counts['MEDIUM']}**\n\n| Severidade | CVE | Pacote | Instalado | Fix | Descrição |\n|---|---|---|---|---|---|\n")
-                  icons = {"CRITICAL":"🔴","HIGH":"🟠","MEDIUM":"🟡","LOW":"🟢","UNKNOWN":"⚪"}
-                  for v in all_vulns[:25]:
-                      lines.append(f"| {icons.get(v['severity'],'⚪')} {v['severity']} | `{v['id']}` | `{v['pkg']}` | {v['installed']} | {v['fixed']} | {v['title']} |\n")
-          except Exception as e:
-              lines.append(f"> ⚠️ {e}\n")
-          open(summary, "a").writelines(lines)
-          PYEOF
-        env:
-          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -234,14 +128,13 @@ jobs:
           name: eval-docker-image
           path: /tmp
       - run: docker load --input /tmp/evaluation-service.tar
-      - env:
+      - name: Tag e push para ECR
+        env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: tech-challenge-prod/evaluation-service
           IMAGE_TAG: ${{ github.sha }}
         run: |
           SHORT_SHA=$(echo $IMAGE_TAG | cut -c1-7)
-          FULL_TAG="$ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA"
-          docker tag evaluation-service:$IMAGE_TAG $FULL_TAG
-          docker push $FULL_TAG
-          echo "### 🚀 Push ECR — evaluation-service" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Imagem: \`$FULL_TAG\`" >> $GITHUB_STEP_SUMMARY
+          docker tag evaluation-service:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA
+          echo "✅ Imagem publicada: $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA" >> $GITHUB_STEP_SUMMARY
