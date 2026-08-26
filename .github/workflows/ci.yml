@@ -54,7 +54,25 @@ jobs:
           files: test-results.xml
       - name: Complexidade ciclomática (gocyclo)
         if: always()
-        run: gocyclo -over 5 . || true
+        run: |
+          echo "## 🔬 Complexidade Ciclomática" >> $GITHUB_STEP_SUMMARY
+          gocyclo -over 1 . | sort -rn | head -10 > cyclo-top.txt || true
+          if [ ! -s cyclo-top.txt ]; then
+            echo "✅ Todas as funções com complexidade baixa." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Função | Score | Localização |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|-------------|" >> $GITHUB_STEP_SUMMARY
+            while IFS= read -r line; do
+              SCORE=$(echo "$line" | cut -d' ' -f1)
+              FUNC=$(echo "$line" | cut -d' ' -f3)
+              LOC=$(echo "$line" | cut -d' ' -f4)
+              if [ "$SCORE" -ge 10 ] 2>/dev/null; then ICON="🔴"
+              elif [ "$SCORE" -ge 5 ] 2>/dev/null; then ICON="🟡"
+              else ICON="🟢"; fi
+              echo "| \\\$FUNC\\\ | $ICON $SCORE | \\\$LOC\\\ |" >> $GITHUB_STEP_SUMMARY
+            done < cyclo-top.txt
+          fi
+          gocyclo -over 5 . || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
