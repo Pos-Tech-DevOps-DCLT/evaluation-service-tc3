@@ -59,8 +59,21 @@ jobs:
           go-version: "1.21"
       - name: Instalar golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
-      - name: Executar golangci-lint
-        run: golangci-lint run ./... --out-format line-number || true
+      - name: Executar golangci-lint e publicar no Job Summary
+        run: |
+          echo "## 🔍 Lint — golangci-lint" >> $GITHUB_STEP_SUMMARY
+          OUTPUT=$(golangci-lint run ./... --out-format line-number 2>&1) || true
+          COUNT=$(echo "$OUTPUT" | grep -c "^" || echo "0")
+          if [ -z "$OUTPUT" ]; then
+            echo "✅ Nenhum problema encontrado." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> ⚠️ **$COUNT problema(s) encontrado(s)** — não bloqueia a pipeline." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "$OUTPUT"
 
   docker-build:
     name: "3 · Docker Build"
