@@ -28,8 +28,25 @@ jobs:
       - name: Executar testes com cobertura
         run: |
           go test ./... -v -coverprofile=coverage.out -covermode=atomic 2>&1 | tee test-output.txt
-          go tool cover -func=coverage.out
+          go tool cover -func=coverage.out | tee coverage-func.txt
           cat test-output.txt | go-junit-report -set-exit-code > test-results.xml || true
+      - name: Publicar cobertura no Job Summary
+        if: always()
+        run: |
+          echo "## 📈 Cobertura de Código" >> $GITHUB_STEP_SUMMARY
+          echo "| Função | Cobertura |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|----------|" >> $GITHUB_STEP_SUMMARY
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if echo "$line" | grep -q "total:"; then
+              PCT=$(echo "$line" | awk '{print $NF}')
+              echo "| **Total** | **$PCT** |" >> $GITHUB_STEP_SUMMARY
+            else
+              FUNC=$(echo "$line" | awk '{print $2}')
+              PCT=$(echo "$line" | awk '{print $NF}')
+              echo "| \`$FUNC\` | $PCT |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done < coverage-func.txt || true
       - name: Publicar resultados dos testes
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
