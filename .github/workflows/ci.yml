@@ -90,7 +90,7 @@ jobs:
           tags: evaluation-service:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/auth-service.tar
+          outputs: type=docker,dest=/tmp/evaluation-service.tar
       - uses: actions/upload-artifact@v4
         with:
           name: eval-docker-image
