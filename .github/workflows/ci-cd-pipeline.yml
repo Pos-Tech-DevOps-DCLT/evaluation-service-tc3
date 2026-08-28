@@ -1,4 +1,4 @@
-name: CI/CD — evaluation-service-tc3
+name: CI/CD — evaluation-service-tc3 
 
 on:
   push:
