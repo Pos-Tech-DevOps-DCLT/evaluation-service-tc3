@@ -15,5 +15,5 @@ jobs:
   ci:
     uses: Pos-Tech-DevOps-DCLT/infra-tc3/.github/workflows/ci-cd-go-template.yaml@main
     with:
-      project: evaluation-service-tc3
+      project: evaluation-service
     secrets: inherit
