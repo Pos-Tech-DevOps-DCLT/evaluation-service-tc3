@@ -3,6 +3,8 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
+RUN apk add --no-cache ca-certificates
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -14,6 +16,7 @@ FROM scratch
 
 WORKDIR /app
 
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /app/evaluation-service .
 
 EXPOSE 8004
